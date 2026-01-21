@@ -1,0 +1,21 @@
+# PowerShell specific
+*.ps1xml
+
+# Test files
+testfolder/
+*.docx
+*.doc
+*.pdf
+
+# Temporary files
+*~
+~$*
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
