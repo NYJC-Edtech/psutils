@@ -193,14 +193,20 @@ These are non-negotiable behavioral guarantees that FileSqueeze MUST uphold.
 **Invariant**: User config at `~/.config/filesqueeze/config.toml` is the single source of truth.
 
 **Behavior**:
-- Tilde paths expanded once at config generation (`filesqueeze init-config`)
-- Runtime uses absolute paths, no re-expansion
+- Tilde (`~`) paths are expanded at runtime when accessing directory properties
+- Users can specify tilde in config files, environment variables, or defaults
 - Configuration changes require service restart
 
 **Implementation**:
-- `cmd_init_config` expands `~` to absolute paths
-- Config class stores absolute paths
-- No tilde expansion at runtime
+- Config properties (`input_dir`, `output_dir`) call `.expanduser()` to expand tildes
+- Raw config values (via `.get()`) preserve tildes for serialization
+- Environment variables respected as highest priority overrides
+
+**Rationale**:
+- More flexible: users don't need to re-run init-config to change paths
+- Works with all config sources (defaults, files, env vars)
+- Cross-platform: tilde works on Linux/macOS/Windows
+- Backward compatible with existing configs
 
 ### Log File Location
 
