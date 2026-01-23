@@ -14,10 +14,12 @@ This document outlines the refactoring priorities for FileSqueeze based on a com
 
 | Priority | Issue Count | Severity | Timeline |
 |----------|--------------|----------|----------|
-| 🔴 Critical | 8 | Breaks functionality, security risks | This Week |
+| 🔴 Critical | 9 | Breaks functionality, security risks | This Week |
 | 🟠 High | 18 | Maintenance nightmares, technical debt | This Month |
 | 🟡 Medium | 22 | Quality of life, technical debt | This Quarter |
 | 🟢 Low | 10 | Nice to have, cleanup | Future |
+
+**Note**: Issue #2 (Bare Exception Handlers) is BLOCKED on issue #2.5 (Design Logging Strategy).
 
 ---
 
@@ -34,33 +36,47 @@ This document outlines the refactoring priorities for FileSqueeze based on a com
 
 **Impact**: Application FAILS for any user without this exact network drive. Not portable. Zero deployment flexibility.
 
+**User Feedback**: Input/output directories should be specified in config, not hardcoded. Use sensible fallbacks (project or user directory).
+
 **Fix Strategy**:
-1. Replace with relative paths as defaults:
+1. Use user home directory as default fallback:
    ```python
-   'input': './upload',
-   'output': './compressed',
+   # In default.toml
+   input = "~/FileSqueeze/upload"
+   output = "~/FileSqueeze/compressed"
+
+   # Config will expand ~ during init-config
    ```
-2. Add environment variable support:
-   ```python
-   'input': os.getenv('FILESQUEEZE_INPUT_DIR', './upload'),
-   'output': os.getenv('FILESQUEEZE_OUTPUT_DIR', './compressed'),
+2. Environment variable support for overrides:
+   ```bash
+   export FILESQUEEZE_INPUT_DIR="/custom/input"
+   export FILESQUEEZE_OUTPUT_DIR="/custom/output"
    ```
-3. Update default.toml to match
-4. Document in README.md
+3. `filesqueeze init-config` creates directories in user home by default
+4. Users can edit config.toml to point to network drives
+5. Document in README.md
+
+**Rationale**:
+- User home directory (~) works on all systems
+- Config is the single source of truth (PRD invariant)
+- Environment variables allow deployment flexibility
+- No hardcoding = portable codebase
 
 **Files to Modify**:
-- `filesqueeze/config.py` (DEFAULTS dict)
-- `filesqueeze/default.toml`
-- `README.md` (installation section)
+- `filesqueeze/default.toml` (use ~/FileSqueeze/* paths)
+- `filesqueeze/config.py` (support env var overrides)
+- `filesqueeze/cli.py` (init-config should create directories)
+- `README.md` (document configuration)
 
 **Tests**:
-- Verify default config uses relative paths
-- Test environment variable overrides
-- Integration test: service starts with default paths
+- Verify default config uses ~/FileSqueeze paths
+- Test environment variable overrides work
+- Integration test: service starts with default user directory paths
+- Test: init-config creates directories in user home
 
 ---
 
-### 2. Bare Exception Handlers 🚨
+### 2. Bare Exception Handlers 🚨 (BLOCKED - Requires Logging Strategy First)
 **Locations**: 11 instances across codebase
 - `filesqueeze/ocr.py:78` - `except Exception:`
 - `filesqueeze/handlers.py:27,77,157,208` - `except Exception:`
@@ -75,7 +91,11 @@ Silences unexpected errors, makes debugging impossible.
 
 **Impact**: Runtime errors get swallowed, impossible to debug production issues.
 
-**Fix Strategy**:
+**User Feedback**: Design a coherent logging strategy before tackling bare exception handlers.
+
+**BLOCKED ON**: Issue #2.5 - Design Logging Strategy
+
+**Planned Fix Strategy** (after logging strategy is defined):
 1. Replace with specific exceptions:
    ```python
    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
@@ -88,7 +108,7 @@ Silences unexpected errors, makes debugging impossible.
    class ProcessingError(FileSqueezeError): pass
    class BinaryNotFoundError(FileSqueezeError): pass
    ```
-3. Establish error handling policy (see section 5.2)
+3. Follow logging strategy for error handling policy
 
 **Files to Modify**:
 - `filesqueeze/handlers.py` (4 locations)
@@ -100,6 +120,42 @@ Silences unexpected errors, makes debugging impossible.
 - Unit tests for each exception type
 - Integration test: errors are properly logged
 - Test: invalid binaries show helpful error messages
+
+---
+
+### 2.5. Design Logging Strategy 🔵 (NEW - Prerequisite for #2)
+**Location**: Project-wide
+
+**Issue**: No coherent logging strategy exists. Current logging is ad-hoc and inconsistent.
+
+**Impact**: Cannot properly fix bare exception handlers without knowing how to log errors.
+
+**Requirements**:
+1. **Log Levels**: When to use DEBUG, INFO, WARNING, ERROR, CRITICAL
+2. **Log Format**: Consistent format across all modules
+3. **Error Logging**: exc_info=True for exceptions, structured error messages
+4. **User-Facing Errors**: When to show errors to user vs log only
+5. **Context**: Include relevant context (file path, operation, etc.)
+6. **Performance**: Avoid excessive logging in hot paths
+
+**Design Tasks**:
+1. Audit current logging usage across codebase
+2. Define logging level usage guidelines
+3. Create logging utility functions for common patterns
+4. Document error handling policy
+5. Update bare exception handlers after strategy is defined
+
+**Files to Create**:
+- `filesqueeze/logging.py` - Logging utilities and helpers
+- `docs/LOGGING.md` - Logging strategy documentation
+
+**Files to Update**:
+- All files with bare exception handlers (after strategy defined)
+
+**Deliverable**:
+- Documented logging strategy
+- Logging utility functions
+- Examples of proper error logging
 
 ---
 
@@ -150,35 +206,83 @@ Breaks encapsulation, fragile to State class changes.
 
 **Impact**: Invalid configs cause cryptic runtime errors instead of clear validation messages.
 
-**Fix Strategy**:
-1. Add `pydantic` to dependencies:
-   ```toml
-   [tool.poetry.dependencies]
-   pydantic = "^2.0.0"
-   ```
-2. Create validation schema:
-   ```python
-   from pydantic import BaseModel, Field, validator
-   from pathlib import Path
+**User Feedback**: Don't use pydantic (unnecessary dependency). Use dataclasses instead. This requires restructuring config as a module directory.
 
-   class ProcessingConfig(BaseModel):
-       video_crf: int = Field(ge=0, le=51, default=23)
-       video_threads: int = Field(gt=0, default=4)
-       pdf_quality: str = Field(regex=r'^(screen|ebook|printer|prepress)$')
-       min_age_seconds: int = Field(ge=0, default=5)
-       min_size_bytes: int = Field(ge=0, default=1024)
+**Fix Strategy**:
+1. Convert `config.py` to `config/` module directory:
    ```
-3. Validate in Config.__post_init__ or before processing
+   filesqueeze/
+     config/
+       __init__.py       # Public Config class
+       schema.py         # Dataclass definitions with validation
+       loader.py         # Config loading logic
+       defaults.py       # Default values
+   ```
+
+2. Create dataclass schemas with validation:
+   ```python
+   # schema.py
+   from dataclasses import dataclass, field
+   from pathlib import Path
+   from typing import Optional
+
+   @dataclass
+   class VideoConfig:
+       crf: int = field(default=23)
+       threads: int = field(default=4)
+       preset: str = field(default="medium")
+
+       def __post_init__(self):
+           if not 0 <= self.crf <= 51:
+               raise ValueError(f"CRF must be 0-51, got {self.crf}")
+           if self.threads < 1:
+               raise ValueError(f"Threads must be positive, got {self.threads}")
+
+   @dataclass
+   class FileDetectionConfig:
+       min_age_seconds: int = field(default=5)
+       min_size_bytes: int = field(default=1024)
+       extensions: list[str] = field(default_factory=list)
+
+       def __post_init__(self):
+           if self.min_age_seconds < 0:
+               raise ValueError(f"min_age_seconds must be non-negative")
+           if self.min_size_bytes < 0:
+               raise ValueError(f"min_size_bytes must be non-negative")
+   ```
+
+3. Config class validates on load:
+   ```python
+   # __init__.py
+   class Config:
+       def __init__(self, config_path: Optional[str] = None):
+           loaded = loader.load(config_path)
+           self.video = VideoConfig(**loaded['video'])
+           self.file_detection = FileDetectionConfig(**loaded['file_detection'])
+           # ... etc
+   ```
+
+**Rationale**:
+- Dataclasses: built-in, no dependencies, fast
+- Module structure: clear separation of concerns
+- Validation: __post_init__ validates on construction
+- Type safety: mypy can validate dataclass fields
+
+**Files to Create**:
+- `filesqueeze/config/__init__.py` - Public API
+- `filesqueeze/config/schema.py` - Dataclass schemas
+- `filesqueeze/config/loader.py` - TOML loading logic
+- `filesqueeze/config/defaults.py` - Default constants
 
 **Files to Modify**:
-- `pyproject.toml` (add pydantic)
-- `filesqueeze/config.py` (add validation)
-- `filesqueeze/default.toml` (adjust defaults if needed)
+- `filesqueeze/config.py` - Delete, replace with module
+- `pyproject.toml` - No changes needed (dataclasses built-in)
 
 **Tests**:
-- Unit tests for validation schema
-- Integration test: invalid config shows clear error
+- Unit tests for each schema class validation
+- Integration test: invalid config raises clear error
 - Test: all default values pass validation
+- Test: config module imports work (backward compat)
 
 ---
 
@@ -523,16 +627,21 @@ Duplicated in 3 places.
 ### Phase 1: Critical Foundation (Week 1-2)
 **Goal**: Fix blocking issues that prevent reliable operation
 
-1. ✅ Replace hardcoded paths with relative paths + env vars
-2. ✅ Add custom exception classes
-3. ✅ Fix bare exception handlers (use specific exceptions)
-4. ✅ Add configuration validation with pydantic
-5. ✅ Fix private member access in handlers.py
+**BLOCKING DEPENDENCY**: Issue #2.5 (Design Logging Strategy) MUST be completed before Issue #2 (Bare Exception Handlers).
+
+1. ✅ Fix private member access in handlers.py (Issue #3)
+2. ✅ Design logging strategy (Issue #2.5) - **PREREQUISITE**
+3. ✅ Replace hardcoded paths with user directory + env vars (Issue #1)
+4. ✅ Restructure config as module with dataclass validation (Issue #4)
+5. ✅ Add custom exception classes (part of Issue #2)
+6. ✅ Fix bare exception handlers using logging strategy (Issue #2)
 
 **Deliverable**:
 - Application works on any system without hardcoded paths
-- Clear error messages instead of silent failures
+- Clear error messages with proper logging
 - Config validation prevents invalid values
+- Encapsulation respected throughout codebase
+- Coherent logging strategy established
 
 ### Phase 2: Deduplication (Week 2-3)
 **Goal**: Remove code duplication, improve maintainability
