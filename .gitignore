@@ -1,21 +1,25 @@
-# PowerShell specific
-*.ps1xml
+# CSV files - typically contain user data that shouldn't be tracked
+*.csv
 
-# Test files
-testfolder/
-*.docx
-*.doc
-*.pdf
+# Claude Code configuration
+.claude/
 
-# Temporary files
-*~
-~$*
+# PowerShell module files
+*.psm1
 
-# OS specific
-.DS_Store
-Thumbs.db
-
-# IDE
+# IDE and editor files
 .vscode/
 .idea/
-*.code-workspace
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Windows thumbnail cache
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Build outputs
+bin/
+obj/

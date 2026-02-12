@@ -1,52 +1,78 @@
 # PowerShell Utilities
 
-A collection of PowerShell scripts for automation and productivity.
+A collection of PowerShell scripts for school/education administration tasks.
+
+## Repository Structure
+
+```
+psutils/
+├── any2pdf/
+│   └── doc2pdf.ps1          # Convert documents to PDF
+└── ct_photo_renamer/
+    ├── Rename-StudentPhotos.ps1    # Batch rename student photos
+    ├── docs/
+    │   ├── PRD.md                   # Product requirements document
+    │   └── Screenshot*.png          # Usage screenshots
+    └── namelist.csv                 # Student name reference (not tracked)
+```
 
 ## Scripts
 
-### any2pdf/doc2pdf.ps1
-Batch convert Word documents (.doc, .docx) to PDF.
+### ct_photo_renamer / Rename-StudentPhotos.ps1
+
+Batch-renames student photos based on a CSV reference file. Designed for school staff to rename photos with the format `{Class}_{FullName}.{ext}`.
 
 **Features:**
-- Interactive and non-interactive modes
-- User-friendly validation and error messages
-- Automatic Word document detection
-- Folder browser integration
-- Defensive validation for non-technical users
-
-**Usage:**
-
-```powershell
-# Interactive mode (with confirmation dialogs)
-.\any2pdf\doc2pdf.ps1 "path\to\folder"
-
-# Non-interactive mode (no prompts, suitable for automation)
-.\any2pdf\doc2pdf.ps1 -Force "path\to\folder"
-
-# No arguments - shows folder browser dialog
-.\any2pdf\doc2pdf.ps1
-```
-
-**Flags:**
-- `-Force` or `-f` - Run in non-interactive mode (suppresses all dialogs)
+- GUI folder selection dialog
+- CSV-based name mapping
+- Automatic backup creation
+- Undo functionality (`-Undo` switch)
+- Input validation and error handling
 
 **Requirements:**
-- Microsoft Word installed
-- Windows PowerShell 5.1+ or PowerShell 7+
+- Windows 10/11
+- PowerShell 5.1+
+- `namelist.csv` in script directory with format:
+  ```csv
+  Full Name,Class
+  John Smith,10A
+  Jane Doe,10B
+  ```
 
-## Installation
+**Usage:**
+```powershell
+# Rename photos
+.\Rename-StudentPhotos.ps1
 
-1. Clone this repository or download the scripts
-2. Run scripts from the repository root
+# Undo a rename operation
+.\Rename-StudentPhotos.ps1 -Undo
+```
 
-## Development
+**Documentation:** See [ct_photo_renamer/docs/PRD.md](ct_photo_renamer/docs/PRD.md) for detailed requirements and workflow.
 
-Scripts are designed with:
-- Defensive validation for non-technical users
-- Clear, informative error messages
-- Support for both interactive and automated use cases
-- Proper COM object cleanup and error handling
+### any2pdf / doc2pdf.ps1
+
+Convert documents to PDF format.
+
+**Usage:**
+```powershell
+.\doc2pdf.ps1
+```
+
+## Setup
+
+1. Clone this repository:
+   ```powershell
+   git clone https://github.com/NYJC-Edtech/psutils.git
+   cd psutils
+   ```
+
+2. For `ct_photo_renamer`, create a `namelist.csv` file in the script directory.
 
 ## License
 
-MIT License - See LICENSE file for details
+See LICENSE file for details.
+
+## Contributing
+
+This is an internal NYJC EdTech project. For questions or issues, please contact the IT department.
